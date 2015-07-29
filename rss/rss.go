@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/svagner/gmail2go/logger"
 )
 
 type Author struct {
@@ -19,6 +21,7 @@ type Entry struct {
 	Title    string `xml:"title"`
 	Summary  string `xml:"summary"`
 	Modified string `xml:"modified"`
+	Id       string `xml:"id"`
 	Author   Author `xml:"author"`
 }
 
@@ -29,15 +32,23 @@ func (e *Entry) ModifiedTime() (time.Time, error) {
 
 // Returns a list of Entry objects by parsing the url atom feed
 func Read(url, user, pass string) ([]*Entry, error) {
-	client := new(http.Client)
+	var myTransport http.RoundTripper = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		ResponseHeaderTimeout: time.Second * 2,
+	}
+
+	var client = &http.Client{Transport: myTransport}
 
 	req, err := http.NewRequest("GET", url, nil)
+	logger.DebugPrint("Try to auth at ", url)
 	req.SetBasicAuth(user, pass)
 	resp, err := client.Do(req)
 
 	if err != nil {
+		logger.WarningPrint(err)
 		return nil, err
 	}
+	logger.DebugPrint("RSS: ", resp.StatusCode)
 	if resp.StatusCode != 200 {
 		return nil, errors.New(fmt.Sprintf("Received bad status code: %v", resp.StatusCode))
 	}
@@ -47,6 +58,7 @@ func Read(url, user, pass string) ([]*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.DebugPrint("Get response: ", string(text))
 
 	return unmarshal(text)
 }
